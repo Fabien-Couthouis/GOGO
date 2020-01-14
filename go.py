@@ -1,123 +1,200 @@
-from python_algorithms.basic.union_find import UF
-import numpy as np
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Alphago reproduction IA course project, ENSEIRB-MATMECA
+# COUTHOUIS Fabien - HACHE Louis - Heuillet Alexandre
 
-
-def encode_stone_pos(x, y):
-    return self.size**2*x + y
-
-
-def unencode_stone_pos(xy):
-    x = xy//self.size**2
-    y = xy % self.size**2
-    return (x, y)
-
-
-def get_neighbors((x, y)):
-    return [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
+from UF import UF
+_BOARD_SIZE = 9
 
 
 class Stone:
-    def __init__(self, color, x, y):
-        self.color = color
+    def __init__(self, x, y, color=-1):
         self.x = x
         self.y = y
-
-
-class Chain:
-    def __init__(self, color, chain_id, size):
         self.color = color
-        self.chain_id = chain_id
-        self.liberties = 0
+        self.id = self.x + _BOARD_SIZE*self.y
+
+    def __str__(self):
+        return f"Stone with color: {self.color} and id: id {self.id} placed in position ({self.x},{self.y})"
 
 
+# TODO: fin du game ?
 class Goban:
     _EMPTY = -1
     _WHITE = 0
     _BLACK = 1
 
-    def __init__(self, size):
+    def __init__(self):
         print("je sais pas encore how to play")
-        self.size = size
-        self.whites = UF(self.size*self.size)
-        self.blacks = UF(self.size*self.size)
-        self.white_chains = np.array(self.size*self.size)
-        self.black_chains = np.array(self.size*self.size)
+        self.size = _BOARD_SIZE
+        self.white_uf = UF(self.size*self.size)
+        self.black_uf = UF(self.size*self.size)
+        self.white_score = 0
+        self.black_score = 0
+        # Generate board
+        self.board = []
+        for _ in range(self.size):
+            self.board.append([self._EMPTY] * self.size)
 
-    def get_uf(self, color):
-        if color == _WHITE:
-            return self.whites
+    def _is_pos_valid(self, x, y):
+        return False if (x < 0 or x >= self.size or y < 0 or y >= self.size) else True
+
+    def _get_neighbors(self, stone):
+        'Get all the stones adjacent to the given one.'
+        neighbors = []
+        neighbors_pos = [(stone.x-1, stone.y), (stone.x+1, stone.y),
+                         (stone.x, stone.y-1), (stone.x, stone.y+1)]
+        for x_n, y_n in neighbors_pos:
+            if self._is_pos_valid(x_n, y_n):
+                color = self._get_color_from_pos(x_n, y_n)
+                neighbors.append(Stone(x_n, y_n, color))
+        return neighbors
+
+    def _get_uf(self, color):
+        if color == Goban._WHITE:
+            return self.white_uf
         else:
-            return self.blacks
+            return self.black_uf
 
-    def get_chains(self, color):
-        if color == _WHITE:
-            return self.white_chains
+    def _make_union_with_neighbors(self, stone):
+        'Make union with neighbors in the same color in the union-find corresponding to the stone color.'
+        uf = self._get_uf(stone.color)
+        neighbors = self._get_neighbors(stone)
+        for neighbor in neighbors:
+            if stone.color == neighbor.color:
+                uf.union(stone.id, neighbor.id)
+
+    def _get_color_from_pos(self, x, y):
+        return self.board[x][y]
+
+    def _get_stone_from_id(self, stone_id):
+        'Generate Stone object from id'
+        x = stone_id % self.size
+        y = stone_id // self.size
+        color = self._get_color_from_pos(x, y)
+        return Stone(x, y, color)
+
+    def _put_stone(self, stone):
+        print("PUT STONE:", stone)
+        self.board[stone.x][stone.y] = stone.color
+        self._make_union_with_neighbors(stone)
+        self._update_adjacent_opponent_chains(stone)
+
+        # Update score
+        if stone.color == Goban._WHITE:
+            self.white_score += 1
         else:
-            return self.black_chains
+            self.black_score += 1
 
-    def delete_chain(self, old_id, color):
-        chain = self.get_chains(color)
-        chain = np.delete(chain, old_id)
+    def _get_chain(self, stone):
+        'Get the chain in which the stone belongs. Return None if the stone is not put on the board.'
+        # Stone not put on board
+        if self._get_color_from_pos(stone.x, stone.y) == Goban._EMPTY:
+            return None
 
-    def put_stone(self, stone):
-        neighbors = [(stone.x-1, stone.y), (stone.x+1, stone.y),
-                     (stone.x, stone.y-1), (stone.x, stone.y+1)]
-        uf = get_uf(stone.color)
-        encoded_stone = encode_stone_pos((stone.x, stone.y))
+        uf = self._get_uf(stone.color)
+        set_id = uf.find(stone.id)
+        chain = uf.get_chain(set_id)
+        return chain
 
-        chain = Chain(stone.color, encoded_stone, 1)
-        neighbors_old_ids = []
+    def _get_chain_liberties(self, chain):
+        'Get number of liberties for the chain.'
+        if chain is None:
+            raise Exception("Chain do not exists")
 
-        for position in neighbors:
-            encoded_neighbor = encode_stone_pos(position)
-            neighbors_old_ids.append(uf.find(encoded_neighbor))
-            uf.union(encoded_stone, encoded_neighbor)
+        liberties = 0
+        # Iterate over all stones in the chain
+        for stone_id in chain:
+            stone = self._get_stone_from_id(stone_id)
+            neighbors = self._get_neighbors(stone)
+            # Increment liberties for each empty neighbor
+            for neighbor in neighbors:
+                if neighbor.color == Goban._EMPTY:
+                    liberties += 1
 
-        for i, position in enumerate(neighbors):
-            encoded_neighbor = encode_stone_pos(position)
-            new_id = uf.find(encoded_neighbor)
-            if new_id != neighbors_old_ids[i]:
-                self.delete_chain(
-                    neighbors_old_ids[i], self.get_color_from_pos(position))
+        return liberties
 
-        chain_id = uf.find(encoded_stone)
+    def _update_adjacent_opponent_chains(self, stone):
+        'Check if adjacent chains from opponent has liberties = 0 and delete it if so.'
+        neighbors = self._get_neighbors(stone)
+        opponent_color = self.invert_color(stone.color)
 
-        if chain_id == encoded_stone:
-            chains = self.get_chains(stone.color)
-            chains[encoded_stone] = chain
-            # TODO: DOC, tests
+        for neighbor in neighbors:
+            if neighbor.color == opponent_color:
+                chain = self._get_chain(neighbor)
+                liberties = self._get_chain_liberties(chain)
+                if liberties == 0:
+                    self._delete_chain(chain)
 
-    def get_color_from_pos(self, pos):
-        chain_id = encode_stone_pos(pos)
+    def _delete_chain(self, chain):
+        'Delete all stones from the chain.'
+        def delete_from_board(stone):
+            self.board[stone.x][stone.y] = Goban._EMPTY
 
-        if self.whites._rank[chain_id] != 0:
-            return _WHITE
-        elif self.blacks._rank[chain_id] != 0:
-            return _BLACK
-        else:
-            return _EMPTY
+        for stone_id in chain:
+            stone = self._get_stone_from_id(stone_id)
+            delete_from_board(stone)
+            # Update score
+            if stone.color == Goban._WHITE:
+                self.white_score -= 1
+            else:
+                self.black_score -= 1
 
-    def update_liberties(self, chain):
-        l = 0
-        uf = self.get_uf(chain.color)
+    def play(self, x, y, color):
+        'Append the play to the Goban'
+        if not self._is_pos_valid(x, y):
+            raise Exception("Move not valid (out of board)")
+        if self._get_color_from_pos(x, y) != Goban._EMPTY:
+            raise Exception("Move not valid (stone already here)")
 
-        for s in uf._id:
-            if s == chain.chain_id:
-                stone = unencode_stone_pos(s)
-                neighbors = get_neighbors(stone)
+        stone = Stone(x, y, color)
+        self._put_stone(stone)
 
-                for n in neighbors:
-                    c = self.get_color_from_pos(n)
-                    if c == _EMPTY:
-                        l += 1
+    def get_score(self):
+        'Return: black_score, white_score.'
+        # TODO: vérifier les règles (LOUIS DEMANDER lol x3)
+        # black_score, white_score = 0, 0
+        # for j in range(self.size):
+        #     for i in range(self.size):
+        #         color = self._get_color_from_pos(i, j)
+        #         black_score += 1 if color == Goban._BLACK else 0
+        #         white_score += 1 if color == Goban._WHITE else 0
 
-        chain.liberties = l
+        return self.black_score, self.white_score
 
-        # # PEUT NE PAS MARCHER ATTENTION (mais osef parce que ça sert pas trop)
-        # def find_stone(self,position,color):
-        #     stone_list=get_stone_list(stone.color)
-        #     for uf in stone_list:
-        #         encoded_stone = self.encode_stone_pos(position)
-        #         chain_id = uf.find(encoded_stone)
-        #
-        #     return None
+    def invert_color(self, color):
+        if color not in [Goban._BLACK, Goban._WHITE]:
+            raise Exception("Cannot invert color", color)
+        return Goban._BLACK if color == Goban._WHITE else Goban._BLACK
+
+    def __str__(self):
+        def color_to_str(color):
+            if color == Goban._WHITE:
+                return 'O'
+            elif color == Goban._BLACK:
+                return 'X'
+            else:
+                return '.'
+
+        to_return = ""
+        for j in range(self.size):
+            for i in range(self.size):
+                color = self._get_color_from_pos(i, j)
+                to_return += color_to_str(color)
+            to_return += "\n"
+
+        return to_return
+
+
+if __name__ == "__main__":
+    # LES TESTS (ils sont supers !)
+    goban = Goban()
+    goban._put_stone(Stone(1, 3, Goban._WHITE))
+    goban._put_stone(Stone(1, 5, Goban._WHITE))
+    goban._put_stone(Stone(1, 4, Goban._BLACK))
+    goban._put_stone(Stone(0, 4, Goban._WHITE))
+    goban._put_stone(Stone(2, 4, Goban._WHITE))
+
+    print(goban)
+    chain = goban._get_chain(Stone(1, 5, Goban._WHITE))
+    print(goban._get_chain_liberties(chain))
