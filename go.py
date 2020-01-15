@@ -4,6 +4,7 @@
 # COUTHOUIS Fabien - HACHE Louis - Heuillet Alexandre
 
 from UF import UF
+from Trans import Zob
 _BOARD_SIZE = 9
 
 
@@ -31,10 +32,14 @@ class Goban:
         self.black_uf = UF(self.size*self.size)
         self.white_score = 0
         self.black_score = 0
+        self.n_turns = 0
+        self.consecutive_turns_passed = 0
+        self.last_move = None
         # Generate board
         self.board = []
         for _ in range(self.size):
             self.board.append([self._EMPTY] * self.size)
+        self.zob = Zob(self)
 
     def _is_pos_valid(self, x, y):
         return False if (x < 0 or x >= self.size or y < 0 or y >= self.size) else True
@@ -130,6 +135,8 @@ class Goban:
         'Delete all stones from the chain.'
         def delete_from_board(stone):
             self.board[stone.x][stone.y] = Goban._EMPTY
+            # Append removed stone from the board
+            self.last_move[1].append(stone)
 
         for stone_id in chain:
             stone = self._get_stone_from_id(stone_id)
@@ -148,24 +155,46 @@ class Goban:
             raise Exception("Move not valid (stone already here)")
 
         stone = Stone(x, y, color)
+        # Add stone to last move
+        self.last_move = (stone, [])
+        self.last_move[1].append(stone)
+        print(self.last_move)
         self._put_stone(stone)
+        self.n_turns += 1
+
+        if x == -1 and y == -1:
+            self.consecutive_turns_passed += 1
+        else:
+            self.consecutive_turns_passed = 0
+        self.zob.store()
+
+    def get_last_move(self):
+        return self.last_move
+
+    def is_game_ended(self):
+        if self.n_turns > self.size**2:
+            return True
+        elif self.consecutive_turns_passed == 2:
+            return True
+        elif self.zob.is_a_board_multiple_times():
+            return True
+        else:
+            return False
 
     def get_score(self):
         'Return: black_score, white_score.'
-        # TODO: vérifier les règles (LOUIS DEMANDER lol x3)
-        # black_score, white_score = 0, 0
-        # for j in range(self.size):
-        #     for i in range(self.size):
-        #         color = self._get_color_from_pos(i, j)
-        #         black_score += 1 if color == Goban._BLACK else 0
-        #         white_score += 1 if color == Goban._WHITE else 0
-
         return self.black_score, self.white_score
 
     def invert_color(self, color):
         if color not in [Goban._BLACK, Goban._WHITE]:
             raise Exception("Cannot invert color", color)
         return Goban._BLACK if color == Goban._WHITE else Goban._BLACK
+
+    def get_board_size(self):
+        return self.size
+
+    def get_board(self):
+        return self.board
 
     def __str__(self):
         def color_to_str(color):
@@ -189,12 +218,14 @@ class Goban:
 if __name__ == "__main__":
     # LES TESTS (ils sont supers !)
     goban = Goban()
-    goban._put_stone(Stone(1, 3, Goban._WHITE))
-    goban._put_stone(Stone(1, 5, Goban._WHITE))
-    goban._put_stone(Stone(1, 4, Goban._BLACK))
-    goban._put_stone(Stone(0, 4, Goban._WHITE))
-    goban._put_stone(Stone(2, 4, Goban._WHITE))
+    goban.play(1, 3, Goban._WHITE)
+    goban.play(1, 5, Goban._WHITE)
+    goban.play(1, 4, Goban._BLACK)
+    goban.play(0, 4, Goban._WHITE)
+    goban.play(2, 4, Goban._WHITE)
 
     print(goban)
     chain = goban._get_chain(Stone(1, 5, Goban._WHITE))
     print(goban._get_chain_liberties(chain))
+    print(goban.get_last_move())
+    print(goban.zob.data)
