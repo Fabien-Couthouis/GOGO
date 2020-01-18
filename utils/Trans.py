@@ -1,5 +1,5 @@
 import random
-
+from copy import deepcopy
 # Implementation d'une table de transposition améliorée en utilisant le hashage de Zobrist
 
 
@@ -21,9 +21,9 @@ class Zob:
             return 1
 
     # Calcul du hachage de l'état initial du plateau de jeu
-    def compute_hash(self):
+    def compute_hash(self, goban_board=None):
         h = 0
-        board = self.b.get_board()
+        board = self.b.get_board() if goban_board is None else goban_board
         for i in range(self.b.get_board_size()):
             for j in range(self.b.get_board_size()):
                 if board[i][j] != self._EMPTY:
@@ -41,18 +41,14 @@ class Zob:
 
             self.hash ^= self.zobTable[s.xf][s.yf][self.indexing(s.color)]
 
-    # On regarde si l'état du plateau correspond à un état déjà enregistré dans la table (à l'aide de son hachage)
-    # et on le renvoie le cas échéant
-    def lookup(self):
-        (played_stone, changed_stones) = self.b.get_last_move()
-        if played_stone is not None:
-            self.update_hash(played_stone, changed_stones)
-        return self.data.get(self.hash, None)
-
     def store(self):
         """Stockage de l'état de jeu dans la table de transposition via son hachage"""
         self.data.append(self.compute_hash())
 
-    def is_a_board_multiple_times(self):
-        """Return True if a board has been seen multiple times"""
-        return len(self.data) != len(list(set(self.data))
+    def is_already_played(self, action):
+        """Return True if the play has already be seen"""
+        x, y, color = action
+        goban_board_copy = deepcopy(self.b.get_board())
+        goban_board_copy[x][y] = color
+        play_hash = self.compute_hash(goban_board_copy)
+        return play_hash in self.data
