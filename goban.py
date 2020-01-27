@@ -29,7 +29,7 @@ class Stone:
 class Goban:
     """
     Go simulator (simplified Tromp-Taylor rules: https://senseis.xmp.net/?TrompTaylorRules).
-    
+
     Usefull methods: get_board(), get_legal_actions(), get_score(), get_winner(), is_game_over(), play(action)
 
     """
@@ -100,6 +100,8 @@ class Goban:
     def _put_stone(self, stone):
         'Put stone on the board, update chains and update scores.'
         self._board[stone.x][stone.y] = stone.color
+        # Store the board in zob transtable
+        self.zob.store()
         self._make_union_with_neighbors(stone)
         self._update_adjacent_opponent_chains(stone)
 
@@ -232,6 +234,7 @@ class Goban:
 
     def play(self, action):
         'Append the action tuple (x, y, color) to the Goban'
+
         x, y, color = action
         assert self.is_valid_move(action)
 
@@ -245,8 +248,8 @@ class Goban:
             self._last_move = (stone, [])
             self._last_move[1].append(stone)
             self._put_stone(stone)
+
             self._consecutive_turns_passed = 0
-            self.zob.store()
             self._empty_pos.remove((stone.x, stone.y))
 
         self._next_player = self.invert_color(self._next_player)

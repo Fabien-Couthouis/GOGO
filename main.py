@@ -1,7 +1,6 @@
 import time
 from players.randomPlayer import RandomPlayer
 from players.mctsPlayer import MCTSPlayer
-
 from goban import Goban
 
 
