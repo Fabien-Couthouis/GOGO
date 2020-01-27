@@ -187,6 +187,14 @@ class Goban:
     def get_board(self):
         return self._board
 
+    def get_state(self):
+        if self._next_player == self._BLACK:
+            return self.get_board()
+        else:
+            reversed_board = [
+                [self.invert_color(stone) for stone in row] for row in self.get_board()]
+            return reversed_board
+
     def get_winner(self):
         'Return none if no winner, else return the color of the winner (_EMPTY color if tie)'
         if self.is_game_over():
@@ -266,7 +274,7 @@ class Goban:
     def invert_color(self, color):
         'Return black if given color is white and vice versa'
         if color not in [Goban._BLACK, Goban._WHITE]:
-            raise Exception("Cannot invert color", color)
+            return Goban._EMPTY
         return Goban._BLACK if color == Goban._WHITE else Goban._WHITE
 
     def __str__(self):
