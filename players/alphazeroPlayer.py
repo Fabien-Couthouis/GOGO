@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Alphago reproduction IA course project, ENSEIRB-MATMECA
+# COUTHOUIS Fabien - HACHE Louis - Heuillet Alexandre
+#############################################################
+
 import random
 from players.playerInterface import PlayerInterface
 from operator import itemgetter
@@ -7,45 +14,29 @@ import numpy as np
 from goban import Goban
 import math
 import time
-from models import AlphaZeroModel
+from players.alphazeroModel import AlphaZeroModel
 from players.playerInterface import PlayerInterface
-
-
-def alphazero_policy(goban, model):
-    'NN policy'
-    legal_actions = goban.get_legal_actions()
-    _prior, value = model.predict(goban.get_board())
-    return value
-
-
-def get_prior(goban, model):
-    prior, _value = model.predict(goban.get_board())
-    return prior
-
-
-def rollout_policy(goban):
-    'Rollout randomly'
-    legal_actions = goban.get_legal_actions()
-    action_probs = np.random.rand(len(legal_actions))
-    return zip(legal_actions, action_probs)
 
 
 class Node:
 
-    def __init__(self, parent, mcts):
+    def __init__(self, parent, mcts, prob=1.0, c_puct=1.0):
         self.n_visits = 0
         self.value = 0
         self.children = {}
         self.parent = parent
+        self.prob = prob
         self.mcts = mcts
+        self.c_puct = c_puct
 
         if parent == None:
             self.depth = 0
         else:
             self.depth = self.parent.depth + 1
 
-    def add_child(self, action):
-        self.children[str(action)] = Node(parent=self, mcts=self.mcts)
+    def add_child(self, action, prob):
+        self.children[str(action)] = Node(
+            parent=self, mcts=self.mcts, prob=prob, c_puct=self.c_puct)
 
     def is_root(self):
         return True if self.parent is None else False
@@ -53,24 +44,17 @@ class Node:
     def is_leaf(self):
         return self.children == {}
 
-    def expand(self, actions):
-        for action in actions:
+    def expand(self, actions, probs):
+        for action, prob in zip(actions, probs):
             if str(action) not in self.children:
-                self.add_child(action)
+                self.add_child(action, prob)
         # Return random child
         action, random_child = random.choice(list(self.children.items()))
         return eval(action), random_child
 
     def select(self):
         action, node = max(self.children.items(),
-                           key=lambda node: node[1].ucb1())
-        # action is stored as str in dict, we need to convert it in list before passing it to the game
-        action = eval(action)
-        return action, node
-
-    def select_alphazero(self, prior):
-        action, node = max(self.children.items(),
-                           key=lambda node: node[1].alpha_zero_value(prior))
+                           key=lambda node: node[1].alpha_zero_value())
         # action is stored as str in dict, we need to convert it in list before passing it to the game
         action = eval(action)
         return action, node
@@ -85,11 +69,24 @@ class Node:
             # parent's node refers to opponent's action
             self.parent.back_propagate(1-value)
 
-    # def alpha_zero_value(self, prior, gamma=0.5):
-    #     return gamma * self.ucb1() + (1-gamma) * prior
+    def get_children_nodes(self):
+        return self.children.values()
 
-    def ucb1(self):
-        return self.value / (self.n_visits+1) + math.sqrt(2 * math.log(self.mcts.get_n_simulations()) / (self.n_visits+1))
+    def alpha_zero_value(self):
+        total_sqrt = math.sqrt(
+            sum([child.n_visits for child in self.get_children_nodes()]))
+        # if self.is_root():
+        #     # The root node has an extra noise added to the probabilities to improve the exploration
+        #     noises = np.random.dirichlet(
+        #         (0.03 * self.mcts.goban_size, 0.03 * self.mcts.goban_size))
+        #     prob = [0.75 * prob + 0.25 * noise for prob,
+        #              noise in zip(probs, noises)]
+        score = self.get_value_avg() + self.c_puct * self.prob * \
+            total_sqrt / (1 + self.n_visits)
+        return score
+
+    def get_value_avg(self):
+        return self.value / (self.n_visits + 1)
 
     def get_best_action(self):
         'Get next action based on children values. Return action,node'
@@ -103,7 +100,7 @@ class Node:
     def find_child_with_action(self, action):
         action = str(action)
         # add action if not in child
-        self.expand([action])
+        # self.expand([action])
 
         for child in self.children.items():
             child_action, child_node = child
@@ -116,134 +113,93 @@ class Node:
         return f"Node n°{id(self)} with depth {self.depth} and value {self.value}/{self.n_visits}"
 
 
-class Experience:
-    def __init__(self):
-        self.states = []
-        self.actions = []
-        self.reward = None
-
-    def add_play(self, state, action):
-        self.states.append(state)
-        self.actions.append(action)
-
-    def get_states(self):
-        return np.array(self.states)
-
-    def get_rewards(self):
-        return np.array([self.reward]*len(self.states))
-
-    def clear(self):
-        self.states.clear()
-        self.actions.clear()
-        self.reward = None
-
-
 class MCTS:
     def __init__(self, goban_size):
         self._root = Node(parent=None, mcts=self)
+        self.goban_size = goban_size
         self._n_simulations = 0
         self.model = AlphaZeroModel(input_shape=(
-            goban_size, goban_size), hidden_size=64)
+            goban_size, goban_size), actions_n=goban_size**2)
 
     def get_n_simulations(self):
         return self._n_simulations
 
-    def update_model(self, experiences, batch_size):
-        for i in range(batch_size):
-            experience = random.sample(experiences)
-
-            with tf.GradientTape() as tape:
-                priors, values = self.model.predict(experience.get_states())
-                value_loss = tf.keras.losses.mean_squared_error(
-                    experience.get_rewards(), values)
-                prior_loss = tf.keras.losses.categorical_crossentropy(
-                    experience.priors, priors)
-
-            gradients = tape.gradient(
-                total_loss, self.model.trainable_variables)
-            self.optimizer.apply_gradients(
-                zip(gradients, self.model.trainable_variables))
-
-    def train(self, starting_goban, n_episodes=1000, batch_size=16, starting_node=None, verbose=True):
-        experiences = []
-        current_batch = 0
+    def train(self, starting_goban, n_episodes=1000, batch_size=16, verbose=True):
+        batch = []
         for episode in range(1, n_episodes+1):
-            current_batch += 1
-            goban_copy = copy.deepcopy(goban)
-            experience = Experience()
+            goban_copy = copy.deepcopy(starting_goban)
+            node = self._root
 
             while not goban_copy.is_game_over():
-                action = self.mcts_one_iteraction(
-                    starting_goban, starting_node)
-                self.experience.add_play(goban_copy.get_board(), action)
+                self.search_batch(10, batch_size, goban_copy, node)
+                action, node = node.get_best_action()
+                batch.append(
+                    (goban_copy.get_state(), action, node.get_value_avg()))
 
-            experience.add_reward(goban_copy.get_winner())
-            experiences.append(experience)
-
-            if current_batch == 16:
-                self.update_model(experiences)
-                current_batch = 0
+            if episode % batch_size == 0:
+                self.model.fit(batch)
+                batch.clear()
 
             if verbose and episode % (n_episodes * 0.05) == 0:
                 print("Finished episode", episode, "/", n_episodes)
 
-    def mcts_one_iteraction(self, goban, starting_node=None):
-        """
-        Performs a round of Monte Carlo: https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-        """
+    def search_batch(self, count, batch_size, goban, starting_node=None):
+        for _ in range(count):
+            self.search_one_minibatch(
+                batch_size, goban, starting_node)
 
-        # Selection
-        # Start from root R and select successive child nodes until a leaf node L is reached.
-        node = self._root if starting_node is None else starting_node
-        while not node.is_leaf():
-            prior = get_prior(self.model)
-            # Take ucb-directed action
-            action, node = node.select_alphazero(prior)
-            goban_copy.play(action)
+    def search_one_minibatch(self, minibatch_size, goban, starting_node=None):
+        backprop_queue = []
+        expand_states = []
+        expand_queue = []
+        planned = set()
 
-        # Expansion :
-        # Unless L ends the game decisively (e.g. win/loss/draw) for either player
-        # create one (or more) child nodes and choose node C from one of them.
-        if not goban_copy.is_game_over():
-            action, node = node.expand(goban_copy.get_legal_actions())
-            goban_copy.play(action)
+        for _i_minibatch in range(minibatch_size):
+            # Selections
+            # Start from root R and select successive child nodes until a leaf node L is reached.
+            node = self._root if starting_node is None else starting_node
+            goban_copy = copy.deepcopy(goban)
+            states, actions = [], []
+            while not node.is_leaf():
+                states.append(goban_copy.get_state())
+                actions.append(goban_copy.get_legal_actions())
+                action, node = node.select_alphazero()
+                goban_copy.play(action)
 
-        # Simulation
-        # Complete one random rollout from node C
-        # value = self.simulate(goban_copy)  # TODO: neural network estimation
-        value = alphazero_policy(goban, self.model)
+            if goban_copy.is_game_over():
+                backprop_queue.append(
+                    (goban_copy.get_winner(), states, actions))
+            else:
+                if node not in planned:
+                    planned.add(node)
+                    expand_states.append(states)
+                    expand_queue.append(
+                        (goban_copy.get_state(), states, actions))
 
-        # Backpropagation
-        # Use the result of the playout to update information in the nodes above
-        node.back_propagate(value)
-        return action
+            # Expansion :
+            if expand_queue:
+                # Simulation step replaced by NN
+                # probs, values = self.model.predict(
+                #     np.expand_dims(goban_copy.get_state(), axis=0))
+                state = goban_copy.get_state()
+                print(state.shape)
+                probs, values = self.model.predict(state)
+
+                # create the nodes
+                action, node = node.expand(goban_copy.get_legal_actions())
+                goban_copy.play(action)
+                for (node, states, actions), prob, value in zip(expand_queue, probs, values):
+                    action, node = node.expand(actions, prob)
+                    backprop_queue.append((value, states, actions))
+
+            # Backpropagation
+            for value, states, actions in backprop_queue:
+                # leaf state is not stored in states and actions, so the value of the leaf will be the value of the opponent
+                cur_value = -value
+                node.back_propagate(cur_value)
 
     def set_root(self, node):
         self._root = node
-
-    def simulate(self, goban, limit=1000):
-        """
-        Use the rollout policy to play until the end of the game,
-        returning +1 if the current player wins, 0 if the opponent wins,
-        and 0.5 if it is a tie.
-        """
-        current_player = goban.get_next_player()
-        while not goban.is_game_over():
-            action_probs = rollout_policy(goban)
-            next_action = max(action_probs, key=itemgetter(1))[0]
-            goban.play(next_action)
-
-        winner = goban.get_winner()
-        self._n_simulations += 1
-        # tie
-        if winner == 0:
-            return 0.5
-        # current player wins
-        elif winner == current_player:
-            return 1
-        # current player loses
-        else:
-            return 0
 
     def save(self, path="mcts.pickle"):
         "Save mcts object using joblib"
@@ -251,7 +207,7 @@ class MCTS:
         joblib.dump(self, path, compress=4)
 
 
-class MCTSPlayer(PlayerInterface):
+class AlphaZeroPlayer(PlayerInterface):
     def __init__(self, color, goban_size=7, mcts=None):
         super().__init__(color, goban_size)
         self.mcts = mcts if mcts is not None else MCTS(goban_size)
@@ -266,14 +222,12 @@ class MCTSPlayer(PlayerInterface):
 
     def _play_mcts(self):
         start = time.time()
-        # TODO: take time into account (see Reversi Timer on Github)
-        for i in range(10):
-            self.mcts.mcts_one_iteraction(
-                self.goban, starting_node=self._current_node)
-        print("MCTS took", time.time()-start)
+        self.mcts.search_batch(
+            10, 12, self.goban, starting_node=self._current_node)
+        print("ZERO took", time.time()-start)
 
     def getPlayerName(self):
-        return f"MCTS player {self.color}"
+        return f"AlphaZero player {self.color}"
 
     def getPlayerMove(self):
         self._play_mcts()

@@ -1,6 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Alphago reproduction IA course project, ENSEIRB-MATMECA
+# COUTHOUIS Fabien - HACHE Louis - Heuillet Alexandre
+#############################################################
+
 import time
 from players.randomPlayer import RandomPlayer
 from players.mctsPlayer import MCTSPlayer
+from players.alphazeroPlayer import AlphaZeroPlayer
+
 from goban import Goban
 
 
@@ -56,5 +65,5 @@ def play(player1, player2, goban):
 if __name__ == "__main__":
     goban = Goban()
     player1, player2 = RandomPlayer(
-        goban._WHITE, goban.get_board_size()), MCTSPlayer(goban._BLACK, goban.get_board_size())
+        goban._WHITE, goban.get_board_size()), AlphaZeroPlayer(goban._BLACK, goban.get_board_size())
     play(player1, player2, goban)

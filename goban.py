@@ -4,7 +4,7 @@
 # Alphago reproduction IA course project, ENSEIRB-MATMECA
 # COUTHOUIS Fabien - HACHE Louis - Heuillet Alexandre
 #############################################################
-
+import numpy as np
 from utils.unionFind import UF
 from utils.Trans import Zob
 _BOARD_SIZE = 7
@@ -160,6 +160,9 @@ class Goban:
             self._board[stone.x][stone.y] = Goban._EMPTY
             # Append removed stone to lastmove
             self._last_move[1].append(stone)
+            # And to empty stone list
+            if not (stone.x, stone.y) in self._empty_pos:
+                self._empty_pos.append((stone.x, stone.y))
 
         for stone_id in chain:
             stone = self._get_stone_from_id(stone_id)
@@ -188,12 +191,13 @@ class Goban:
         return self._board
 
     def get_state(self):
-        if self._next_player == self._BLACK:
-            return self.get_board()
-        else:
-            reversed_board = [
-                [self.invert_color(stone) for stone in row] for row in self.get_board()]
-            return reversed_board
+        return np.array(self.get_board())
+        # if self._next_player == self._BLACK:
+        #     return self.get_board()
+        # else:
+        #     reversed_board = [
+        #         [self.invert_color(stone) for stone in row] for row in self.get_board()]
+        #     return reversed_board
 
     def get_winner(self):
         'Return none if no winner, else return the color of the winner (_EMPTY color if tie)'

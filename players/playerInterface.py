@@ -27,5 +27,7 @@ class PlayerInterface():
         return (-1, -1)
 
     def playOpponentMove(self, x, y):
-        'Inform you that the oponent has played this move. You must play it with no search (just update your local variables to take it into account)'
+        """Inform you that the oponent has played this move. You must play it with no search 
+        (just update your local variables to take it into account)
+        """
         pass
