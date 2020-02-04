@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Alphago reproduction IA course project, ENSEIRB-MATMECA
+# COUTHOUIS Fabien - HACHE Louis - Heuillet Alexandre
+#############################################################
+
 from goban import Goban
 
 

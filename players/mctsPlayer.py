@@ -171,41 +171,6 @@ class MCTS:
         else:
             return 0
 
-    def show(self, save_image=False):
-        "Plot mcts using networkx and matplotlib"
-        import networkx as nx
-        from networkx.drawing.nx_agraph import write_dot, graphviz_layout
-
-        def build_graph():
-            def add_childs(graph, label_dict, node):
-                if node.is_leaf():
-                    return
-                if node.is_root:
-                    graph.add_node(id(node))
-                    label_dict[id(node)] = f"{node.value}/{node.n_visits}"
-                for child in node.children.items():
-                    child_node = child[1]
-                    graph.add_node(id(child_node))
-                    graph.add_edge(id(node), id(child_node))
-                    add_childs(graph, label_dict, child_node)
-                    label_dict[id(child_node)
-                               ] = f"{child_node.value}/{child_node.n_visits}"
-
-            graph = nx.DiGraph()
-            label_dict = {}
-            add_childs(graph, label_dict, self._root)
-            return graph, label_dict
-
-        graph, label_dict = build_graph()
-        write_dot(graph, 'mcts.dot')
-        pos = graphviz_layout(graph, prog='dot')
-        _fig, ax = plt.subplots()
-        nx.draw(graph, pos, labels=label_dict,
-                with_labels=True, arrows=False, node_size=1)
-        if save_image:
-            plt.savefig('mcts.png')
-        plt.show()
-
     def save(self, path="mcts.pickle"):
         "Save mcts object using joblib"
         import joblib

@@ -7,7 +7,10 @@
 import numpy as np
 from utils.unionFind import UF
 from utils.Trans import Zob
-_BOARD_SIZE = 7
+
+
+def get_action_id(x, y, board_size):
+    return x + board_size*y
 
 
 class Stone:
@@ -15,17 +18,16 @@ class Stone:
     Plays abstraction and id calculation for union-find
     """
 
-    def __init__(self, x, y, color=-1):
+    def __init__(self, x, y, board_size, color=-1):
         self.x = x
         self.y = y
         self.color = color
-        self.id = self.x + _BOARD_SIZE*self.y
+        self.id = get_action_id(self.x, self.y, board_size)
 
     def __str__(self):
         return f"Stone with color: {self.color} and id: id {self.id} placed in position ({self.x},{self.y})"
 
 
-# TODO: verifier conditions fin du game + score
 class Goban:
     """
     Go simulator (simplified Tromp-Taylor rules: https://senseis.xmp.net/?TrompTaylorRules).
@@ -37,8 +39,8 @@ class Goban:
     _WHITE = 0
     _BLACK = 1
 
-    def __init__(self, board_size=_BOARD_SIZE):
-        print("je sais un peu how to play")
+    def __init__(self, board_size=7):
+        self.board_size = board_size
         self.n_turns = 0
 
         self._size = board_size
@@ -70,7 +72,7 @@ class Goban:
         for x_n, y_n in neighbors_pos:
             if self._is_pos_valid(x_n, y_n):
                 color = self._get_color_from_pos(x_n, y_n)
-                neighbors.append(Stone(x_n, y_n, color))
+                neighbors.append(Stone(x_n, y_n, self.board_size, color))
         return neighbors
 
     def _get_uf(self, color):
@@ -95,7 +97,7 @@ class Goban:
         x = stone_id % self._size
         y = stone_id // self._size
         color = self._get_color_from_pos(x, y)
-        return Stone(x, y, color)
+        return Stone(x, y, self.board_size, color)
 
     def _put_stone(self, stone):
         'Put stone on the board, update chains and update scores.'
@@ -191,13 +193,16 @@ class Goban:
         return self._board
 
     def get_state(self):
-        return np.array(self.get_board())
-        # if self._next_player == self._BLACK:
-        #     return self.get_board()
-        # else:
-        #     reversed_board = [
-        #         [self.invert_color(stone) for stone in row] for row in self.get_board()]
-        #     return reversed_board
+        'Get board state for current player'
+        if self._next_player == self._BLACK:
+            state = self.get_board()
+        else:
+            reversed_board = [
+                [self.invert_color(stone) for stone in row] for row in self.get_board()]
+            state = reversed_board
+        state = np.array(state)
+        state = np.expand_dims(state, axis=-1)
+        return state
 
     def get_winner(self):
         'Return none if no winner, else return the color of the winner (_EMPTY color if tie)'
@@ -255,7 +260,7 @@ class Goban:
             self._consecutive_turns_passed += 1
 
         else:
-            stone = Stone(x, y, color)
+            stone = Stone(x, y, self.board_size, color)
             # Add stone to last move and put it on the board
             self._last_move = (stone, [])
             self._last_move[1].append(stone)
